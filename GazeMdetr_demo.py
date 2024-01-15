@@ -137,13 +137,13 @@ model.eval();
 """Next, we retrieve an image on which we wish to test the model. Here, we use an image from the validation set of COCO"""
 
 
-def plot_inference(im, caption):
+def plot_inference(im, caption, gaze):
   # mean-std normalize the input image (batch-size: 1)
   img = transform(im).unsqueeze(0).cuda()
 
   # propagate through the model
-  memory_cache = model(img, [caption], encode_and_save=True)
-  outputs = model(img, [caption], encode_and_save=False, memory_cache=memory_cache)
+  memory_cache = model(img, [caption], gaze, encode_and_save=True)
+  outputs = model(img, [caption], gaze, encode_and_save=False, memory_cache=memory_cache)
 
   # keep only predictions with 0.7+ confidence
   probas = 1 - outputs['pred_logits'].softmax(-1)[0, :, -1].cpu()
@@ -183,8 +183,18 @@ print("normalized_raw_hm shape: ", normalized_raw_hm.shape)
 
 # Modulated heatmap from VTD
 norm_map = Image.open("/home/suka/code/mdetr/MDETR_test_data/MDETR_4obj_2mustards/normMap/00000001.ppm")
-print("norm_map szie: ",norm_map.size, max(norm_map.getdata()))
+print("norm_map size: ",norm_map.size, "\n norm_map max", max(norm_map.getdata()))
 norm_map.show()
 
+# Normalize w/o converting to tensor
+normalized_norm_map = norm_map.point(lambda x: (x - 127.5) / 127.5)
+print("normalized_norm_map max: ", max(normalized_norm_map.getdata()), "\n normalized_norm_map size: ", normalized_norm_map.size)
 
-plot_inference(im, "Pass the small yellow mustard bottle on the left.")
+# Normalize as tensor
+transform_normMap = T.transforms.Compose([
+    T.transforms.ToTensor()
+])
+normalized_norm_map_tensor = transform_normMap(norm_map)
+print("normalized_norm_map_tensor max: ", torch.max(normalized_norm_map_tensor), "\n normalized_norm_map_tensor shape: ", normalized_norm_map_tensor.shape)
+
+plot_inference(im, "Pass the small yellow mustard bottle on the left.", normalized_norm_map)
