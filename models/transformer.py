@@ -81,17 +81,17 @@ class Transformer(nn.Module):
         query_embed=None,
         pos_embed=None,
         text=None,
+        gaze=None,
         encode_and_save=True,
         text_memory=None,
         img_memory=None,
         text_attention_mask=None,
     ):
+        print("passed")
         if encode_and_save:
             # flatten NxCxHxW to HWxNxC
             bs, c, h, w = src.shape
-            print("src shape: ", bs,c,h,w)
             src = src.flatten(2).permute(2, 0, 1)
-            print("src flattened shape: ", src.shape)
             device = src.device
             pos_embed = pos_embed.flatten(2).permute(2, 0, 1)
             query_embed = query_embed.unsqueeze(1).repeat(1, bs, 1)
