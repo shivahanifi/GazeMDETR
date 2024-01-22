@@ -18,6 +18,7 @@ This section contains the initial boilerplate. Run it first.
 
 import torch
 from PIL import Image
+import numpy as np
 import requests
 import torchvision.transforms as T
 import matplotlib.pyplot as plt
@@ -183,18 +184,55 @@ print("normalized_raw_hm shape: ", normalized_raw_hm.shape)
 
 # Modulated heatmap from VTD
 norm_map = Image.open("/home/suka/code/mdetr/MDETR_test_data/MDETR_4obj_2mustards/normMap/00000001.ppm")
-print("norm_map size: ",norm_map.size, "\n norm_map max", max(norm_map.getdata()))
-norm_map.show()
+#print("norm_map size: ",norm_map.size, "\n norm_map max", max(norm_map.getdata()))
 
-# Normalize w/o converting to tensor
-normalized_norm_map = norm_map.point(lambda x: (x - 127.5) / 127.5)
-print("normalized_norm_map max: ", max(normalized_norm_map.getdata()), "\n normalized_norm_map size: ", normalized_norm_map.size)
+# Modulated heatmap from VTD - Gray scale
+norm_map_gray = norm_map.convert('L')
+#print("norm_map_gray size: ",norm_map_gray.size, "\n norm_map_gray max", max(norm_map_gray.getdata()))
 
-# Normalize as tensor
+fig, axs = plt.subplots(1, 2, figsize=(10, 5))
+axs[0].imshow(norm_map)
+axs[0].set_title("Original Heatmap")
+
+axs[1].imshow(norm_map_gray, cmap='gray')
+axs[1].set_title("Gray scale heatmap")
+plt.show()
+
+
+# norm_map normalize and resize
+normalized_norm_map = norm_map_gray.point(lambda x: (x - 127.5) / 127.5)
+transform_normMap_noTensor = T.transforms.Compose([
+    T.Resize(25)
+])
+reszied_normmap_image = transform_normMap_noTensor(normalized_norm_map)
+#print("reszied_normmap_image max: ", max(reszied_normmap_image.getdata()), "\n reszied_normmap_image shape: ", reszied_normmap_image.size)
+
+# Normalize and reszie as tensor
 transform_normMap = T.transforms.Compose([
+    T.Resize(800),
     T.transforms.ToTensor()
 ])
-normalized_norm_map_tensor = transform_normMap(norm_map)
-print("normalized_norm_map_tensor max: ", torch.max(normalized_norm_map_tensor), "\n normalized_norm_map_tensor shape: ", normalized_norm_map_tensor.shape)
+normalized_norm_map_tensor = transform_normMap(norm_map_gray)
+#print("normalized_norm_map_tensor max: ", torch.max(normalized_norm_map_tensor), "\n normalized_norm_map_tensor shape: ", normalized_norm_map_tensor.shape, "\n",normalized_norm_map_tensor)
 
-plot_inference(im, "Pass the small yellow mustard bottle on the left.", normalized_norm_map)
+# Visualize norm_map tensor before downsampling
+normalized_norm_map_tensor_array = np.squeeze(normalized_norm_map_tensor.cpu().numpy().astype(np.uint8))*255
+#print("normalized_norm_map_tensor_array shape", normalized_norm_map_tensor_array.shape)
+normalized_norm_map_tensor_image = Image.fromarray(normalized_norm_map_tensor_array)
+normalized_norm_map_tensor_image.show()
+
+# Visualize downsampled norm map
+downsampled_norm_map = torch.nn.functional.interpolate(normalized_norm_map_tensor.unsqueeze(0),size=(25,34), mode='bilinear', align_corners=False).squeeze(0)
+#print("downsampled_norm_map max: ", torch.max(downsampled_norm_map), "\n downsampled_norm_map shape: ", downsampled_norm_map.shape)
+downsampled_norm_map_array = np.squeeze(downsampled_norm_map.cpu().numpy().astype(np.uint8))*255
+downsampled_norm_map_image = Image.fromarray(downsampled_norm_map_array)
+
+fig, axs = plt.subplots(1, 2, figsize=(10, 5))
+axs[0].imshow(reszied_normmap_image, cmap='gray')
+axs[0].set_title("downsampled heatmap image")
+
+axs[1].imshow(downsampled_norm_map_image, cmap='gray')
+axs[1].set_title("downsampled heatmap tensor")
+plt.show()
+
+plot_inference(im, "Pass the small yellow mustard bottle on the left.", normalized_norm_map_tensor)
