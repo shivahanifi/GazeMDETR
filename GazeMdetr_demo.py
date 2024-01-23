@@ -202,10 +202,21 @@ plt.show()
 # norm_map normalize and resize
 normalized_norm_map = norm_map_gray.point(lambda x: (x - 127.5) / 127.5)
 transform_normMap_noTensor = T.transforms.Compose([
-    T.Resize(25)
+    T.Resize(size=(25,34))
 ])
 reszied_normmap_image = transform_normMap_noTensor(normalized_norm_map)
-#print("reszied_normmap_image max: ", max(reszied_normmap_image.getdata()), "\n reszied_normmap_image shape: ", reszied_normmap_image.size)
+print("reszied_normmap_image max: ", max(reszied_normmap_image.getdata()), "\n reszied_normmap_image shape: ", reszied_normmap_image.size)
+
+
+# resized image to tensor
+transform_normMap_image_Tensor = T.transforms.Compose([
+    T.transforms.ToTensor()
+])
+reszied_normmap_image_tensor = transform_normMap_image_Tensor(reszied_normmap_image)
+reszied_normmap_image_tensor_array = np.squeeze((reszied_normmap_image_tensor.cpu().numpy())*255)
+print("normalized_norm_map_tensor_array shape", reszied_normmap_image_tensor.shape)
+reszied_normmap_image_tensor_image = Image.fromarray(reszied_normmap_image_tensor_array.astype(np.uint8))
+reszied_normmap_image_tensor_image.show()
 
 # Normalize and reszie as tensor
 transform_normMap = T.transforms.Compose([
@@ -213,23 +224,23 @@ transform_normMap = T.transforms.Compose([
     T.transforms.ToTensor()
 ])
 normalized_norm_map_tensor = transform_normMap(norm_map_gray)
-#print("normalized_norm_map_tensor max: ", torch.max(normalized_norm_map_tensor), "\n normalized_norm_map_tensor shape: ", normalized_norm_map_tensor.shape, "\n",normalized_norm_map_tensor)
+print("normalized_norm_map_tensor max: ", torch.max(normalized_norm_map_tensor), "\n normalized_norm_map_tensor shape: ", normalized_norm_map_tensor.shape, "\n",normalized_norm_map_tensor)
 
 # Visualize norm_map tensor before downsampling
-normalized_norm_map_tensor_array = np.squeeze(normalized_norm_map_tensor.cpu().numpy().astype(np.uint8))*255
+normalized_norm_map_tensor_array = np.squeeze(normalized_norm_map_tensor.cpu().numpy())*255
 #print("normalized_norm_map_tensor_array shape", normalized_norm_map_tensor_array.shape)
-normalized_norm_map_tensor_image = Image.fromarray(normalized_norm_map_tensor_array)
+normalized_norm_map_tensor_image = Image.fromarray(normalized_norm_map_tensor_array.astype(np.uint8))
 normalized_norm_map_tensor_image.show()
 
 # Visualize downsampled norm map
 downsampled_norm_map = torch.nn.functional.interpolate(normalized_norm_map_tensor.unsqueeze(0),size=(25,34), mode='bilinear', align_corners=False).squeeze(0)
-#print("downsampled_norm_map max: ", torch.max(downsampled_norm_map), "\n downsampled_norm_map shape: ", downsampled_norm_map.shape)
-downsampled_norm_map_array = np.squeeze(downsampled_norm_map.cpu().numpy().astype(np.uint8))*255
-downsampled_norm_map_image = Image.fromarray(downsampled_norm_map_array)
+print("downsampled_norm_map max: ", torch.max(downsampled_norm_map), "\n downsampled_norm_map shape: ", downsampled_norm_map.shape)
+downsampled_norm_map_array = np.squeeze(downsampled_norm_map.cpu().numpy())*255
+downsampled_norm_map_image = Image.fromarray(downsampled_norm_map_array.astype(np.uint8))
 
 fig, axs = plt.subplots(1, 2, figsize=(10, 5))
 axs[0].imshow(reszied_normmap_image, cmap='gray')
-axs[0].set_title("downsampled heatmap image")
+axs[0].set_title("resized heatmap image")
 
 axs[1].imshow(downsampled_norm_map_image, cmap='gray')
 axs[1].set_title("downsampled heatmap tensor")
