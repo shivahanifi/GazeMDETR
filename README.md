@@ -33,3 +33,8 @@ The data collected to test the MDETR and GazeMDETR are accessible through the fo
 - [MDETR_test_data](https://drive.google.com/drive/folders/1yrsScizASYnUpczeBKNaPRvDlvtHZALA?usp=sharing)
 - []()
 
+## Combining gaze information with the MDETR data
+
+1. As a first step, I make the heatmap, which is the output of the VTD, available in the GazeMDETR demo code, and do the initial tests on how it would be possible to combine it with the features that are output of the backbone in the MDETR. To that end, the heatmap is resized and converted to tensor and then downsampled to the size of the features, such that they can be multiplied. The visualized output is presented below:
+
+    <img src="img/norm_map_before_after_downsample.png">
