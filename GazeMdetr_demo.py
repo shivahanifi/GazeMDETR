@@ -254,4 +254,4 @@ axs[1].imshow(downsampled_norm_map_image, cmap='gray')
 axs[1].set_title("norm_map tensor downsampled")
 plt.show()
 
-plot_inference(im, "Pass the small yellow mustard bottle on the left.", normalized_norm_map_tensor)
+plot_inference(im, "Pass the small yellow mustard bottle on the left.", downsampled_norm_map)
