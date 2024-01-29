@@ -87,12 +87,14 @@ class Transformer(nn.Module):
         img_memory=None,
         text_attention_mask=None,
     ):
-        print("passed")
         if encode_and_save:
             # flatten NxCxHxW to HWxNxC
             bs, c, h, w = src.shape
-            src = src.flatten(2).permute(2, 0, 1)
             device = src.device
+            gaze = torch.nn.functional.interpolate(gaze.unsqueeze(0),size=(h,w), mode='bilinear', align_corners=False).squeeze(0)
+            gaze = gaze.unsqueeze(0).to(device)
+            src = src * gaze  
+            src = src.flatten(2).permute(2, 0, 1)          
             pos_embed = pos_embed.flatten(2).permute(2, 0, 1)
             query_embed = query_embed.unsqueeze(1).repeat(1, bs, 1)
             mask = mask.flatten(1)

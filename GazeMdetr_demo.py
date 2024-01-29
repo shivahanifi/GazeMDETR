@@ -173,17 +173,17 @@ def plot_inference(im, caption, gaze):
 # plot_inference(im, "5 people each holding an umbrella")
 
 # MDETR_4obj_2mustards + Gaze info
-im = Image.open("/home/suka/code/mdetr/MDETR_test_data/MDETR_4obj_2mustards/rgb_img/00000005.ppm")
+im = Image.open("/home/suka/code/mdetr/MDETR_test_data/MDETR_4obj_2mustards/rgb_img/00000006.ppm")
 im.show()
 
-# Raw heatmap from VTD
-raw_hm = torch.load("/home/suka/code/mdetr/raw_hm_dump(1)/raw_hm_dump/raw_hm_MDETR_4obj_2mustards/tensor1704893612.pt")
-normalized_raw_hm = raw_hm / torch.sum(raw_hm, dim=(2,3), keepdim=True)
-print("raw_hm shape: ", raw_hm.shape)
-print("normalized_raw_hm shape: ", normalized_raw_hm.shape)
+# # Raw heatmap from VTD
+# raw_hm = torch.load("/home/suka/code/mdetr/raw_hm_dump(1)/raw_hm_dump/raw_hm_MDETR_4obj_2mustards/tensor1704893612.pt")
+# normalized_raw_hm = raw_hm / torch.sum(raw_hm, dim=(2,3), keepdim=True)
+# print("raw_hm shape: ", raw_hm.shape)
+# print("normalized_raw_hm shape: ", normalized_raw_hm.shape)
 
 # Modulated heatmap from VTD
-norm_map = Image.open("/home/suka/code/mdetr/MDETR_test_data/MDETR_4obj_2mustards/normMap/00000001.ppm")
+norm_map = Image.open("/home/suka/code/mdetr/MDETR_test_data/MDETR_4obj_2mustards/normMap/00000002.ppm")
 #print("norm_map size: ",norm_map.size, "\n norm_map max", max(norm_map.getdata()))
 
 # Modulated heatmap from VTD - Gray scale
@@ -221,10 +221,11 @@ norm_map_gray = norm_map.convert('L')
 # Normalize and reszie as tensor
 transform_normMap = T.Compose([
     T.Resize(800),
-    T.ToTensor()
+    T.ToTensor(),
+    T.Normalize((-1), (2))
 ])
 normalized_norm_map_tensor = transform_normMap(norm_map_gray)
-print("normalized_norm_map_tensor max: ", torch.max(normalized_norm_map_tensor), "\n normalized_norm_map_tensor shape: ", normalized_norm_map_tensor.shape, "\n",normalized_norm_map_tensor)
+print("normalized_norm_map_tensor max: ", torch.max(normalized_norm_map_tensor), "\n normalized_norm_map_tensor min: ", torch.min(normalized_norm_map_tensor), "\n normalized_norm_map_tensor shape: ", normalized_norm_map_tensor.shape, "\n",normalized_norm_map_tensor)
 
 # Visualize norm_map tensor before downsampling
 normalized_norm_map_tensor_array = np.squeeze(normalized_norm_map_tensor.cpu().numpy())*255
@@ -254,4 +255,5 @@ axs[1].imshow(downsampled_norm_map_image, cmap='gray')
 axs[1].set_title("norm_map tensor downsampled")
 plt.show()
 
-plot_inference(im, "Pass the small yellow mustard bottle on the left.", downsampled_norm_map)
+
+plot_inference(im, "Pass the small yellow mustard bottle on the left.", normalized_norm_map_tensor)

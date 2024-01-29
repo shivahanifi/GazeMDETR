@@ -87,7 +87,7 @@ class MDETR(nn.Module):
         if qa_dataset is not None:
             if split_qa_heads:
                 self.answer_type_head = nn.Linear(hidden_dim, 5)
-                # TODO: make this more general .
+                # TODO: make this more general
                 if qa_dataset == "gqa":
                     self.answer_rel_head = nn.Linear(hidden_dim, 1594)
                     self.answer_obj_head = nn.Linear(hidden_dim, 3)
@@ -106,7 +106,7 @@ class MDETR(nn.Module):
                 assert qa_dataset == "gqa", "Clevr QA is not supported with unified head"
                 self.answer_head = nn.Linear(hidden_dim, 1853)
 
-    def forward(self, samples: NestedTensor, captions, gaze, encode_and_save=True, memory_cache=None):
+    def forward(self, samples: NestedTensor, captions, gaze,encode_and_save=True, memory_cache=None):
         """The forward expects a NestedTensor, which consists of:
            - samples.tensor: batched images, of shape [batch_size x 3 x H x W]
            - samples.mask: a binary mask of shape [batch_size x H x W], containing 1 on padded pixels
