@@ -15,7 +15,10 @@ Welcome to the demo notebook for MDETR. We'll show-case detection, segmentation 
 
 This section contains the initial boilerplate. Run it first.
 """
-
+import sys
+import argparse
+import os
+import xml.etree.ElementTree as ET
 import torch
 from PIL import Image
 import numpy as np
@@ -30,6 +33,11 @@ from skimage.measure import find_contours
 from matplotlib import patches,  lines
 from matplotlib.patches import Polygon
 
+parser = argparse.ArgumentParser(description='Caption format selection')
+parser.add_argument('-cc', '--caption_category', type=str, choices=['A', 'B', 'C', 'D', 'E'], default='A', help='Specify a value (A, B, C, D, E) to determine the caption category. A:The, B:This is a, C:Look at the, D:Point at the, E:Pass the')
+parser.add_argument('-cd', '--caption_details', type=int, choices=[1, 2, 3, 4], default=1, help='Specify a detail level as (1, 2, 3, 4) to determine the caption details. 1:pose+color+name+placement, 2:pose+name+placement, 3:color+name, 4:name')
+args=parser.parse_args()
+
 torch.set_grad_enabled(False);
 
 # standard PyTorch mean-std input image normalization
@@ -37,6 +45,13 @@ transform = T.Compose([
     T.Resize(800),
     T.ToTensor(),
     T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
+])
+
+# Normalize and reszie norm_map, valuesbetween (0.2,1)
+transform_normMap = T.Compose([
+    T.Resize(800),
+    T.ToTensor(),
+    T.Normalize((-0.25), (1.25))
 ])
 
 # for output bounding box post-processing
@@ -66,7 +81,7 @@ def apply_mask(image, mask, color, alpha=0.5):
                                   image[:, :, c])
     return image
 
-def plot_results(pil_img, scores, boxes, labels, masks=None):
+def plot_results(pil_img, scores, boxes, labels, save_fig_path, masks=None):
     plt.figure(figsize=(16,10))
     np_image = np.array(pil_img)
     ax = plt.gca()
@@ -96,7 +111,14 @@ def plot_results(pil_img, scores, boxes, labels, masks=None):
 
     plt.imshow(np_image)
     plt.axis('off')
-    plt.show()
+    if save_fig_path is not None:
+        save_fig_dir = os.path.dirname(save_fig_path)
+        if not os.path.exists(save_fig_dir):
+            os.makedirs(save_fig_dir)
+        plt.savefig(save_fig_path, bbox_inches='tight', pad_inches=0.1)
+        plt.show()
+    else:
+        plt.show()
 
 
 def add_res(results, ax, color='green'):
@@ -138,7 +160,7 @@ model.eval();
 """Next, we retrieve an image on which we wish to test the model. Here, we use an image from the validation set of COCO"""
 
 
-def plot_inference(im, caption, gaze):
+def plot_inference(im, caption, gaze,save_fig_path):
   # mean-std normalize the input image (batch-size: 1)
   img = transform(im).unsqueeze(0).cuda()
 
@@ -148,7 +170,12 @@ def plot_inference(im, caption, gaze):
 
   # keep only predictions with 0.7+ confidence
   probas = 1 - outputs['pred_logits'].softmax(-1)[0, :, -1].cpu()
-  keep = (probas > 0.7).cpu()
+  #keep = (probas > 0.7).cpu()
+  
+  # Keep the prediction with max confidence
+  max_val, max_index = torch.max(probas, dim=0)
+  keep = torch.zeros_like(probas, dtype=torch.bool).cpu()
+  keep[max_index] = True
 
   # convert boxes from [0; 1] to image scales
   bboxes_scaled = rescale_bboxes(outputs['pred_boxes'].cpu()[0, keep], im.size)
@@ -163,7 +190,7 @@ def plot_inference(im, caption, gaze):
         predicted_spans [item] += " " + caption[span.start:span.end]
 
   labels = [predicted_spans [k] for k in sorted(list(predicted_spans .keys()))]
-  plot_results(im, probas[keep], bboxes_scaled, labels)
+  plot_results(im, probas[keep], bboxes_scaled, labels, save_fig_path)
 
 """Let's first try to single out the salient objects in the image"""
 
@@ -172,9 +199,130 @@ def plot_inference(im, caption, gaze):
 # im.show()
 # plot_inference(im, "5 people each holding an umbrella")
 
-# MDETR_4obj_2mustards + Gaze info
-im = Image.open("/home/suka/code/mdetr/MDETR_test_data/MDETR_4obj_2mustards/rgb_img/00000006.ppm")
-im.show()
+
+# All the images and normmaps in the test sets - enter the caption through command line
+file_path = "/home/suka/code/Data/annotated_MDETR_test_data"
+folders = sorted([f for f in os.listdir(file_path) if os.path.isdir(os.path.join(file_path, f))])
+#folders = folders[2:]
+for folder in folders:
+    folder_path = os.path.join(file_path, folder)
+    rgb_folders_path = os.path.join(folder_path, 'rgb_img')
+    normMap_folders_path = os.path.join(folder_path, 'normMap')
+    rgb_folders = sorted([f for f in os.listdir(rgb_folders_path) if os.path.isdir(os.path.join(rgb_folders_path, f))])
+    normMap_folders = sorted([f for f in os.listdir(normMap_folders_path) if os.path.isdir(os.path.join(normMap_folders_path, f))])
+    for i in range(min(len(rgb_folders),len(normMap_folders))):
+        # input images
+        images_path = os.path.join(rgb_folders_path,rgb_folders[i])
+        images = sorted([f for f in os.listdir(images_path) if '.xml' not in f])
+        # input caption
+        annotation_path = os.path.join(images_path, 'annotation.xml')
+        tree = ET.parse(annotation_path)
+        root = tree.getroot()
+        for obj in root.findall('object'):
+            if obj.find('name').text != 'head':
+                obj_info = {
+                    'name': obj.find('name').text,
+                    'color': obj.find('color').text,
+                    'pose': obj.find('pose').text,
+                    'placement': obj.find('placement').text,
+                    'bndbox': {
+                        'xmin': int(obj.find('bndbox/xmin').text),
+                        'ymin': int(obj.find('bndbox/ymin').text),
+                        'xmax': int(obj.find('bndbox/xmax').text),
+                        'ymax': int(obj.find('bndbox/ymax').text)
+                    }
+                }
+        gt_bbox = [obj_info['bndbox']['xmin'], obj_info['bndbox']['ymin'], obj_info['bndbox']['xmax'], obj_info['bndbox']['ymax']]
+        # input heatmaps        
+        normMaps_path = os.path.join(normMap_folders_path, normMap_folders[i])
+        normMaps = sorted([f for f in os.listdir(normMaps_path)])
+        for j in range(min(len(images),len(normMaps))):
+            im_path = os.path.join(images_path, images[j])
+            im = Image.open(im_path)
+            im.show()
+            # Define caption templates
+            caption_templates = {
+                'A': {
+                    1: "The {pose} {color} {name} {placement}.",
+                    2: "The {pose} {name} {placement}.",
+                    3: "The {color} {name}.",
+                    4: "The {name}.",
+                },
+                'B': {
+                    1: "This is a {pose} {color} {name} {placement}.",
+                    2: "This is a {pose} {name} {placement}.",
+                    3: "This is a {color} {name}.",
+                    4: "This is a {name}.",
+                },
+                'C': {
+                    1: "Look at the {pose} {color} {name} {placement}.",
+                    2: "Look at the {pose} {name} {placement}.",
+                    3: "Look at the {color} {name}.",
+                    4: "Look at the {name}.",
+                },
+                'D': {
+                    1: "Point at the {pose} {color} {name} {placement}.",
+                    2: "Point at the {pose} {name} {placement}.",
+                    3: "Point at the {color} {name}.",
+                    4: "Point at the {name}.",
+                },
+                'E': {
+                    1: "Pass the {pose} {color} {name} {placement}.",
+                    2: "Pass the {pose} {name} {placement}.",
+                    3: "Pass the {color} {name}.",
+                    4: "Pass the {name}.",
+                }
+            }
+
+            # Construct caption
+            caption_category = args.caption_category
+            caption_details = args.caption_details
+            caption = caption_templates[caption_category][caption_details].format(**obj_info)
+            print('caption: ', caption)
+
+            caption_words = caption.split()
+            save_fig_path = os.path.join('/home/suka/code/Data/GazeMDETR_captions_tests', str(caption_category), str(caption_details), folder, rgb_folders[i], "_".join(caption_words), images[j].split('.')[0])
+            norm_map_path = os.path.join(normMaps_path, normMaps[j])
+            norm_map = Image.open(norm_map_path)
+            norm_map_gray = norm_map.convert('L')
+            normalized_norm_map_tensor = transform_normMap(norm_map_gray)
+            # Visualize norm_map tensor before downsampling
+            normalized_norm_map_tensor_array = np.squeeze(normalized_norm_map_tensor.cpu().numpy())*255
+            normalized_norm_map_tensor_image = Image.fromarray(normalized_norm_map_tensor_array.astype(np.uint8))
+            # Visualize downsampled norm map
+            downsampled_norm_map = torch.nn.functional.interpolate(normalized_norm_map_tensor.unsqueeze(0),size=(25,34), mode='bilinear', align_corners=False).squeeze(0)
+            downsampled_norm_map_array = np.squeeze(downsampled_norm_map.cpu().numpy())*255
+            downsampled_norm_map_image = Image.fromarray(downsampled_norm_map_array.astype(np.uint8))
+            save_normMap_path = os.path.join('/home/suka/code/Data/GazeMDETR_captions_tests', str(caption_category), str(caption_details), folder, rgb_folders[i], "_".join(caption_words), 'normMaps', images[j].split('.')[0])
+            # Visualize heatmap tensor before and after downsampling
+            fig, axs = plt.subplots(1, 2, figsize=(10, 5))
+            axs[0].imshow(normalized_norm_map_tensor_image, cmap='gray')
+            axs[0].set_title("norm_map tensor")
+
+            axs[1].imshow(downsampled_norm_map_image, cmap='gray')
+            axs[1].set_title("norm_map tensor downsampled")
+            
+            if save_normMap_path is not None:
+                save_normMap_path_dir = os.path.dirname(save_normMap_path)
+                if not os.path.exists(save_normMap_path_dir):
+                    os.makedirs(save_normMap_path_dir)
+                plt.savefig(save_normMap_path, bbox_inches='tight', pad_inches=0.1)
+                plt.show()
+            else:
+                plt.show()
+            
+            plot_inference(im, caption, normalized_norm_map_tensor,save_fig_path)
+
+
+
+
+
+
+
+
+# # MDETR_4obj_2mustards + Gaze info
+# im = Image.open("/home/suka/code/mdetr/MDETR_test_data/MDETR_2mustards_biggerFront/rgb_img/00000012.ppm")
+# im.show()
 
 # # Raw heatmap from VTD
 # raw_hm = torch.load("/home/suka/code/mdetr/raw_hm_dump(1)/raw_hm_dump/raw_hm_MDETR_4obj_2mustards/tensor1704893612.pt")
@@ -182,12 +330,12 @@ im.show()
 # print("raw_hm shape: ", raw_hm.shape)
 # print("normalized_raw_hm shape: ", normalized_raw_hm.shape)
 
-# Modulated heatmap from VTD
-norm_map = Image.open("/home/suka/code/mdetr/MDETR_test_data/MDETR_4obj_2mustards/normMap/00000002.ppm")
-#print("norm_map size: ",norm_map.size, "\n norm_map max", max(norm_map.getdata()))
+# # Modulated heatmap from VTD
+# norm_map = Image.open("/home/suka/code/mdetr/MDETR_test_data/MDETR_2mustards_biggerFront/normMap/00000009.ppm")
+# #print("norm_map size: ",norm_map.size, "\n norm_map max", max(norm_map.getdata()))
 
 # Modulated heatmap from VTD - Gray scale
-norm_map_gray = norm_map.convert('L')
+#norm_map_gray = norm_map.convert('L')
 #print("norm_map_gray size: ",norm_map_gray.size, "\n norm_map_gray max", max(norm_map_gray.getdata()))
 
 # norm_map RGB and Grayscale visualization
@@ -218,25 +366,20 @@ norm_map_gray = norm_map.convert('L')
 # reszied_normmap_image_tensor_image = Image.fromarray(reszied_normmap_image_tensor_array.astype(np.uint8))
 # reszied_normmap_image_tensor_image.show()
 
-# Normalize and reszie as tensor
-transform_normMap = T.Compose([
-    T.Resize(800),
-    T.ToTensor(),
-    T.Normalize((-1), (2))
-])
-normalized_norm_map_tensor = transform_normMap(norm_map_gray)
-print("normalized_norm_map_tensor max: ", torch.max(normalized_norm_map_tensor), "\n normalized_norm_map_tensor min: ", torch.min(normalized_norm_map_tensor), "\n normalized_norm_map_tensor shape: ", normalized_norm_map_tensor.shape, "\n",normalized_norm_map_tensor)
 
-# Visualize norm_map tensor before downsampling
-normalized_norm_map_tensor_array = np.squeeze(normalized_norm_map_tensor.cpu().numpy())*255
-#print("normalized_norm_map_tensor_array shape", normalized_norm_map_tensor_array.shape)
-normalized_norm_map_tensor_image = Image.fromarray(normalized_norm_map_tensor_array.astype(np.uint8))
+#normalized_norm_map_tensor = transform_normMap(norm_map_gray)
+#print("normalized_norm_map_tensor max: ", torch.max(normalized_norm_map_tensor), "\n normalized_norm_map_tensor min: ", torch.min(normalized_norm_map_tensor), "\n normalized_norm_map_tensor shape: ", normalized_norm_map_tensor.shape, "\n",normalized_norm_map_tensor)
 
-# Visualize downsampled norm map
-downsampled_norm_map = torch.nn.functional.interpolate(normalized_norm_map_tensor.unsqueeze(0),size=(25,34), mode='bilinear', align_corners=False).squeeze(0)
-print("downsampled_norm_map max: ", torch.max(downsampled_norm_map), "\n downsampled_norm_map shape: ", downsampled_norm_map.shape)
-downsampled_norm_map_array = np.squeeze(downsampled_norm_map.cpu().numpy())*255
-downsampled_norm_map_image = Image.fromarray(downsampled_norm_map_array.astype(np.uint8))
+# # Visualize norm_map tensor before downsampling
+# normalized_norm_map_tensor_array = np.squeeze(normalized_norm_map_tensor.cpu().numpy())*255
+# #print("normalized_norm_map_tensor_array shape", normalized_norm_map_tensor_array.shape)
+# normalized_norm_map_tensor_image = Image.fromarray(normalized_norm_map_tensor_array.astype(np.uint8))
+
+# # Visualize downsampled norm map
+# downsampled_norm_map = torch.nn.functional.interpolate(normalized_norm_map_tensor.unsqueeze(0),size=(25,34), mode='bilinear', align_corners=False).squeeze(0)
+# print("downsampled_norm_map max: ", torch.max(downsampled_norm_map), "\n downsampled_norm_map shape: ", downsampled_norm_map.shape)
+# downsampled_norm_map_array = np.squeeze(downsampled_norm_map.cpu().numpy())*255
+# downsampled_norm_map_image = Image.fromarray(downsampled_norm_map_array.astype(np.uint8))
 
 # fig, axs = plt.subplots(1, 2, figsize=(10, 5))
 # axs[0].imshow(reszied_normmap_image, cmap='gray')
@@ -246,14 +389,14 @@ downsampled_norm_map_image = Image.fromarray(downsampled_norm_map_array.astype(n
 # axs[1].set_title("downsampled heatmap tensor")
 # plt.show()
 
-# Visualize heatmap tensor before and after downsampling
-fig, axs = plt.subplots(1, 2, figsize=(10, 5))
-axs[0].imshow(normalized_norm_map_tensor_image, cmap='gray')
-axs[0].set_title("norm_map tensor")
+# # Visualize heatmap tensor before and after downsampling
+# fig, axs = plt.subplots(1, 2, figsize=(10, 5))
+# axs[0].imshow(normalized_norm_map_tensor_image, cmap='gray')
+# axs[0].set_title("norm_map tensor")
 
-axs[1].imshow(downsampled_norm_map_image, cmap='gray')
-axs[1].set_title("norm_map tensor downsampled")
-plt.show()
+# axs[1].imshow(downsampled_norm_map_image, cmap='gray')
+# axs[1].set_title("norm_map tensor downsampled")
+# plt.show()
 
 
-plot_inference(im, "Pass the small yellow mustard bottle on the left.", normalized_norm_map_tensor)
+#plot_inference(im, "Pass the small yellow mustard bottle on the right.", normalized_norm_map_tensor)
