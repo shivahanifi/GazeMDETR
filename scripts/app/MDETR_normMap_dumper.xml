@@ -1,0 +1,21 @@
+<application>
+<name>MDETR norm map</name>
+<version>1.0</version>
+
+
+<!-- Modules -->
+    <module>
+        <name>yarpdatadumper</name>
+        <parameters>--name /Users/emaiettini/shiva/MDETR_test_data/MDETR_2mustards_smallerFront/normMap --type image --rxTime --txTime </parameters>
+        <node>localhost</node>
+    </module>
+
+<!-- Connections -->
+
+    <connection>
+		<from>/vtd_bbox/normMap:o</from>
+		<to>/Users/emaiettini/shiva/MDETR_test_data/MDETR_2mustards_smallerFront/normMap</to>
+		<protocol>mjpeg</protocol>
+	</connection>
+    
+</application>
